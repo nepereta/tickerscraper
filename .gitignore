@@ -1,0 +1,9 @@
+AGENTS.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+HEARTBEAT.md
+projects/
+node_modules/
+.env
