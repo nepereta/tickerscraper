@@ -16,16 +16,30 @@ async function getPrice(symbol) {
             let data = '';
             res.on('data', (chunk) => { data += chunk; });
             res.on('end', () => {
-                // Finviz stores price in a table cell usually next to the text "Price"
-                // Extracting it from the text content
+                // Regular Price (Last Close)
                 const priceMatch = data.match(/Price<\/td><td[^>]*><b>([\d.]+)<\/b>/i);
-                if (priceMatch) {
-                    resolve(parseFloat(priceMatch[1]));
+                
+                // Finviz after-hours price is usually in the 'data' variable in a script tag
+                // or sometimes in a specific span if the market is currently in extended hours.
+                // Regex for "aftermarket": 190.25 (as found in some raw sources)
+                const aftermarketMatch = data.match(/"aftermarket":\s*([\d.]+)/i);
+                
+                if (aftermarketMatch && parseFloat(aftermarketMatch[1]) > 0) {
+                    resolve({
+                        price: parseFloat(aftermarketMatch[1]),
+                        type: 'extended',
+                        regularPrice: priceMatch ? parseFloat(priceMatch[1]) : null
+                    });
+                } else if (priceMatch) {
+                    resolve({
+                        price: parseFloat(priceMatch[1]),
+                        type: 'regular'
+                    });
                 } else {
-                    // Fallback to simpler search in case of layout changes
+                    // Fallback to simpler search
                     const fallbackMatch = data.match(/"Price","value":"([\d.]+)"/i);
                     if (fallbackMatch) {
-                        resolve(parseFloat(fallbackMatch[1]));
+                        resolve({ price: parseFloat(fallbackMatch[1]), type: 'regular' });
                     } else {
                         reject(new Error(`Could not find price for ${symbol}`));
                     }
@@ -37,7 +51,11 @@ async function getPrice(symbol) {
 
 const symbol = process.argv[2] || 'AAPL';
 getPrice(symbol.toUpperCase())
-    .then(price => console.log(JSON.stringify({ symbol: symbol.toUpperCase(), price, timestamp: new Date().toISOString() })))
+    .then(result => console.log(JSON.stringify({ 
+        symbol: symbol.toUpperCase(), 
+        ...result,
+        timestamp: new Date().toISOString() 
+    })))
     .catch(err => {
         console.error(JSON.stringify({ error: err.message, symbol }));
         process.exit(1);
